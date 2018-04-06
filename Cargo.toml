@@ -3,8 +3,19 @@ name = "cardgame"
 version = "0.1.0"
 authors = ["Samuel Sleight <samuel.sleight@gmail.com>"]
 
+[[bin]]
+name = "server"
+path = "src/server.rs"
+
+[[bin]]
+name = "client"
+path = "src/client.rs"
+
 [workspace]
-members = [ "client", "server", "lobby" ]
+members = [ "server", "lobby" ]
 
 [dependencies]
 server = { path = "server" }
+serde = "1.0"
+serde_json = "1.0"
+serde_derive = "1.0"

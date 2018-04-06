@@ -2,45 +2,63 @@ extern crate lobby;
 
 #[macro_use] extern crate serde_derive;
 extern crate serde;
+extern crate vec_map;
 
 use std::thread;
 use std::io::Result;
 use std::net::ToSocketAddrs;
 use std::sync::{Arc, Mutex};
 
+use vec_map::VecMap;
+
 use lobby::{Lobby, Event, EventKind};
 use proto::{ProtocolMessage, ProtocolResponse};
+use game::Game;
 
 pub mod proto;
+pub mod game;
 
-pub struct GameServer {
-    lobby: Arc<Mutex<Lobby<ProtocolMessage>>>
+pub struct GameServer<G: Game + 'static> {
+    lobby: Arc<Mutex<Lobby<ProtocolMessage<G>>>>,
+    players: Arc<Mutex<VecMap<G::Player>>>,
 }
 
-impl GameServer {
-    fn new(lobby: Arc<Mutex<Lobby<ProtocolMessage>>>) -> GameServer {
+impl<G: Game + 'static> GameServer<G> {
+    fn new(lobby: Arc<Mutex<Lobby<ProtocolMessage<G>>>>) -> Self {
         GameServer {
-            lobby
+            lobby,
+            players: Arc::new(Mutex::new(VecMap::new())),
         }
     }
 
-    fn handle_event(&mut self, event: Event<ProtocolMessage>) {
+    fn handle_event(&mut self, event: Event<ProtocolMessage<G>>) {
         match event.event {
             EventKind::DataReceived(ProtocolMessage::ChatMessage(text)) => {
-                self.lobby.lock().unwrap().send_to_except(event.from, &ProtocolResponse::ChatMessage(event.from, text.trim_right().into())).unwrap()
+                self.lobby.lock().unwrap().send_to_except(event.from, ProtocolResponse::ChatMessage::<G>(event.from, text.trim_right().into())).unwrap();
             },
+
+            EventKind::DataReceived(ProtocolMessage::PlayerUpdate(player)) => {
+                self.players.lock().unwrap().insert(event.from, player.clone());
+                self.lobby.lock().unwrap().send_to_except(event.from, ProtocolResponse::PlayerUpdate::<G>(event.from, player)).unwrap();
+            }
 
             EventKind::ConnectionReceived(addr) => {
-                self.lobby.lock().unwrap().send_to_except(event.from, &ProtocolResponse::Connection(event.from, addr)).unwrap()
+                self.players.lock().unwrap().insert(event.from, Default::default());
+                self.lobby.lock().unwrap().send_to_except(event.from, ProtocolResponse::Connection::<G>(event.from, addr)).unwrap();
             },
 
-            EventKind::ConnectionLost(_) => self.lobby.lock().unwrap().send(&ProtocolResponse::ConnectionLost(event.from)).unwrap(),
+            EventKind::ConnectionLost(_) => {
+                self.players.lock().unwrap().remove(event.from);
+                self.lobby.lock().unwrap().send(ProtocolResponse::ConnectionLost::<G>(event.from)).unwrap();
+            },
 
-            _ => println!("{:?}", event)
+            EventKind::DataError(err) => {
+                println!("Error: {:?}", err);
+            }
         }
     }
 
-    pub fn spawn<A: ToSocketAddrs>(addr: A) -> Result<Arc<Mutex<GameServer>>> {
+    pub fn spawn<A: ToSocketAddrs>(addr: A) -> Result<Arc<Mutex<Self>>> {
         let lobby = Arc::new(Mutex::new(Lobby::spawn(addr)?));
         let thread_lobby = lobby.clone();
 
