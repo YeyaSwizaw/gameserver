@@ -1,6 +1,6 @@
-#[macro_use] extern crate serde_derive;
 extern crate serde_json;
 extern crate serde;
+extern crate server;
 
 use std::io;
 use std::thread;
@@ -9,9 +9,7 @@ use std::net::TcpStream;
 use serde::Deserialize;
 use serde_json::{Deserializer, to_writer};
 
-use proto::{ProtocolMessage, ProtocolResponse};
-
-mod proto;
+use server::proto::{ProtocolMessage, ProtocolResponse};
 
 fn handle_response(data: ProtocolResponse) {
     match data {
@@ -26,7 +24,7 @@ fn main() {
     let ip = args[1].clone();
     let port = args[2].clone();
 
-    let mut stream = TcpStream::connect([ip, port].join(":")).unwrap();
+    let stream = TcpStream::connect([ip, port].join(":")).unwrap();
 
     let thread_stream = stream.try_clone().unwrap();
     thread_stream.set_nonblocking(false).unwrap();
@@ -38,7 +36,7 @@ fn main() {
 
     loop {
         let mut input = String::new();
-        if let Ok(_) = io::stdin().read_line(&mut input) {
+        if io::stdin().read_line(&mut input).is_ok() {
             to_writer(stream.try_clone().unwrap(), &ProtocolMessage::ChatMessage(input)).unwrap();
         }
     }

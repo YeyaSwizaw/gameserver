@@ -1,16 +1,17 @@
 extern crate lobby;
-extern crate client;
 
 #[macro_use] extern crate serde_derive;
 extern crate serde;
 
 use std::thread;
 use std::io::Result;
+use std::net::ToSocketAddrs;
 use std::sync::{Arc, Mutex};
-use std::net::{ToSocketAddrs, SocketAddr};
 
 use lobby::{Lobby, Event, EventKind};
-use client::{ProtocolMessage, ProtocolResponse};
+use proto::{ProtocolMessage, ProtocolResponse};
+
+pub mod proto;
 
 pub struct GameServer {
     lobby: Arc<Mutex<Lobby<ProtocolMessage>>>

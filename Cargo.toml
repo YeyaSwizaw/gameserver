@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Samuel Sleight <samuel.sleight@gmail.com>"]
 
 [workspace]
+members = [ "client", "server", "lobby" ]
 
 [dependencies]
 server = { path = "server" }

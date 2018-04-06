@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["Samuel Sleight <samuel.sleight@gmail.com>"]
 
 [dependencies]
-client = { path = "../client" }
 lobby = { path = "../lobby" }
 serde = "1.0"
 serde_derive = "1.0"
