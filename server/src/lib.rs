@@ -1,55 +1,52 @@
 extern crate lobby;
-
-#[macro_use] extern crate serde_derive;
-extern crate serde;
+extern crate shared;
 extern crate vec_map;
 
-use std::thread;
-use std::io::Result;
-use std::net::ToSocketAddrs;
-use std::sync::{Arc, Mutex};
+use std::{
+    thread,
+    io::Result,
+    net::ToSocketAddrs,
+    sync::{Arc, Mutex},
+};
 
+use shared::proto;
+use lobby::{Lobby, Event, EventKind};
 use vec_map::VecMap;
 
-use lobby::{Lobby, Event, EventKind};
-use proto::{ProtocolMessage, ProtocolResponse};
-use game::Game;
-
-pub mod proto;
-pub mod game;
+pub use shared::game::Game;
 
 pub struct GameServer<G: Game + 'static> {
-    lobby: Arc<Mutex<Lobby<ProtocolMessage<G>>>>,
+    lobby: Arc<Mutex<Lobby<proto::Client<G>>>>,
     players: Arc<Mutex<VecMap<G::Player>>>,
 }
 
 impl<G: Game + 'static> GameServer<G> {
-    fn new(lobby: Arc<Mutex<Lobby<ProtocolMessage<G>>>>) -> Self {
+    fn new(lobby: Arc<Mutex<Lobby<proto::Client<G>>>>) -> Self {
         GameServer {
             lobby,
             players: Arc::new(Mutex::new(VecMap::new())),
         }
     }
 
-    fn handle_event(&mut self, event: Event<ProtocolMessage<G>>) {
+    fn handle_event(&mut self, event: Event<proto::Client<G>>) {
         match event.event {
-            EventKind::DataReceived(ProtocolMessage::ChatMessage(text)) => {
-                self.lobby.lock().unwrap().send_to_except(event.from, ProtocolResponse::ChatMessage::<G>(event.from, text.trim_right().into())).unwrap();
+            EventKind::DataReceived(proto::Client::ChatMessage(text)) => {
+                self.lobby.lock().unwrap().send_to_except(event.from, proto::Server::ChatMessage::<G>(event.from, text.trim_right().into())).unwrap();
             },
 
-            EventKind::DataReceived(ProtocolMessage::PlayerUpdate(player)) => {
+            EventKind::DataReceived(proto::Client::PlayerUpdate(player)) => {
                 self.players.lock().unwrap().insert(event.from, player.clone());
-                self.lobby.lock().unwrap().send_to_except(event.from, ProtocolResponse::PlayerUpdate::<G>(event.from, player)).unwrap();
+                self.lobby.lock().unwrap().send_to_except(event.from, proto::Server::PlayerUpdate::<G>(event.from, player)).unwrap();
             }
 
             EventKind::ConnectionReceived(addr) => {
                 self.players.lock().unwrap().insert(event.from, Default::default());
-                self.lobby.lock().unwrap().send_to_except(event.from, ProtocolResponse::Connection::<G>(event.from, addr)).unwrap();
+                self.lobby.lock().unwrap().send_to_except(event.from, proto::Server::Connection::<G>(event.from, addr)).unwrap();
             },
 
             EventKind::ConnectionLost(_) => {
                 self.players.lock().unwrap().remove(event.from);
-                self.lobby.lock().unwrap().send(ProtocolResponse::ConnectionLost::<G>(event.from)).unwrap();
+                self.lobby.lock().unwrap().send(proto::Server::ConnectionLost::<G>(event.from)).unwrap();
             },
 
             EventKind::DataError(err) => {
