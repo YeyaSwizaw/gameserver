@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use shared::game::Game;
 
 pub struct Event<G: Game> {
@@ -6,17 +8,17 @@ pub struct Event<G: Game> {
 }
 
 pub enum EventKind<G: Game> {
-    Connection,
+    Connection(SocketAddr),
     Disconnection,
     ChatMessage(String),
     PlayerUpdate(G::Player),
 }
 
 impl<G: Game> Event<G> {
-    pub(crate) fn connection(from: usize) -> Self {
+    pub(crate) fn connection(from: usize, addr: SocketAddr) -> Self {
         Event {
             from,
-            event: EventKind::Connection,
+            event: EventKind::Connection(addr),
         }
     }
 

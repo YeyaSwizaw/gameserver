@@ -50,9 +50,9 @@ impl<G: Game + 'static> GameClient<G> {
                 tx.send(Event::player_update(from, player)).unwrap();
             },
 
-            proto::Server::Connection(from, _) => {
+            proto::Server::Connection(from, addr) => {
                 self.players.lock().unwrap().insert(from, Default::default());
-                tx.send(Event::connection(from)).unwrap();
+                tx.send(Event::connection(from, addr)).unwrap();
             },
 
             proto::Server::ConnectionLost(from) => {
@@ -76,6 +76,11 @@ impl<G: Game + 'static> GameClient<G> {
 
     pub fn events<'a>(&'a self) -> impl Iterator<Item=Event<G>> + 'a {
         self.event_rx.try_iter()
+    }
+
+    pub fn player(&self, id: usize) -> Option<G::Player> {
+        let lock = self.players.lock().unwrap();
+        lock.get(id).map(|player| player.clone())
     }
 
     pub fn spawn<A: ToSocketAddrs>(addr: A) -> Result<Arc<Mutex<Self>>> {

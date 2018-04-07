@@ -36,12 +36,20 @@ impl<G: Game + 'static> GameServer<G> {
 
             EventKind::DataReceived(proto::Client::PlayerUpdate(player)) => {
                 self.players.lock().unwrap().insert(event.from, player.clone());
-                self.lobby.lock().unwrap().send_to_except(event.from, proto::Server::PlayerUpdate::<G>(event.from, player)).unwrap();
+                self.lobby.lock().unwrap().send(proto::Server::PlayerUpdate::<G>(event.from, player)).unwrap();
             }
 
             EventKind::ConnectionReceived(addr) => {
                 self.players.lock().unwrap().insert(event.from, Default::default());
-                self.lobby.lock().unwrap().send_to_except(event.from, proto::Server::Connection::<G>(event.from, addr)).unwrap();
+
+                {
+                    let lobby = self.lobby.lock().unwrap();
+                    lobby.send_to_except(event.from, proto::Server::Connection::<G>(event.from, addr)).unwrap();
+
+                    for (id, player) in self.players.lock().unwrap().iter() {
+                        lobby.send_to(event.from, proto::Server::PlayerUpdate::<G>(id, player.clone())).unwrap();
+                    }
+                }
             },
 
             EventKind::ConnectionLost(_) => {
