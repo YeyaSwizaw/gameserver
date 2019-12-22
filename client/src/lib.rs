@@ -1,8 +1,3 @@
-extern crate shared;
-extern crate serde;
-extern crate serde_json;
-extern crate vec_map;
-
 use std::{
     thread,
     io::Result,

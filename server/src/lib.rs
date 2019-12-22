@@ -1,7 +1,3 @@
-extern crate lobby;
-extern crate shared;
-extern crate vec_map;
-
 use std::{
     thread,
     io::Result,
