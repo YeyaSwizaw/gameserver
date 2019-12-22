@@ -18,7 +18,7 @@ use vec_map::VecMap;
 use serde::Deserialize;
 use serde_json::{Deserializer, to_writer};
 
-use event::Event;
+use crate::event::Event;
 
 pub use shared::game::Game;
 

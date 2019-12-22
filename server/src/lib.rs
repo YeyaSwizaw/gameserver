@@ -31,7 +31,7 @@ impl<G: Game + 'static> GameServer<G> {
     fn handle_event(&mut self, event: Event<proto::Client<G>>) {
         match event.event {
             EventKind::DataReceived(proto::Client::ChatMessage(text)) => {
-                self.lobby.lock().unwrap().send_to_except(event.from, proto::Server::ChatMessage::<G>(event.from, text.trim_right().into())).unwrap();
+                self.lobby.lock().unwrap().send_to_except(event.from, proto::Server::ChatMessage::<G>(event.from, text.trim_end().into())).unwrap();
             },
 
             EventKind::DataReceived(proto::Client::PlayerUpdate(player)) => {

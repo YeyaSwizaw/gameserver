@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use game::Game;
+use crate::game::Game;
 
 pub use self::{
     server::Protocol as Server,
