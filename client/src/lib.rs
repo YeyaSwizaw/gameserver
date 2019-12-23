@@ -9,19 +9,19 @@ use std::{
 };
 
 use shared::proto;
-use vec_map::VecMap;
 use serde::Deserialize;
 use serde_json::{Deserializer, to_writer};
 
 use crate::event::Event;
 
 pub use shared::game::Game;
+pub use shared::players::Players;
 
 pub mod event;
 
 pub struct GameClient<G: Game + 'static> {
     stream: TcpStream,
-    players: Arc<Mutex<VecMap<G::Player>>>,
+    players: Players<G>,
 
     event_rx: Receiver<Event<G>>,
 }
@@ -30,7 +30,7 @@ impl<G: Game + 'static> GameClient<G> {
     fn new(stream: TcpStream, event_rx: Receiver<Event<G>>) -> Self {
         GameClient {
             stream,
-            players: Arc::new(Mutex::new(VecMap::new())),
+            players: Players::new(),
 
             event_rx,
         }
@@ -41,18 +41,16 @@ impl<G: Game + 'static> GameClient<G> {
             proto::Server::ChatMessage(from, message) => tx.send(Event::chat_message(from, message)).unwrap(),
 
             proto::Server::PlayerUpdate(from, player) => {
-                self.players.lock().unwrap().insert(from, player.clone());
+                self.players.update_player(from, player.clone());
                 tx.send(Event::player_update(from, player)).unwrap();
             },
 
             proto::Server::Connection(from, addr) => {
-                self.players.lock().unwrap().insert(from, Default::default());
                 tx.send(Event::connection(from, addr)).unwrap();
             },
 
             proto::Server::ConnectionLost(from) => {
                 tx.send(Event::disconnection(from)).unwrap();
-                self.players.lock().unwrap().remove(from);
             },
         }
     }
@@ -74,8 +72,7 @@ impl<G: Game + 'static> GameClient<G> {
     }
 
     pub fn player(&self, id: usize) -> Option<G::Player> {
-        let lock = self.players.lock().unwrap();
-        lock.get(id).map(|player| player.clone())
+        self.players.player(id)
     }
 
     pub fn spawn<A: ToSocketAddrs>(addr: A) -> Result<Arc<Mutex<Self>>> {

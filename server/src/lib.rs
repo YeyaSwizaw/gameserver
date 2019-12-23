@@ -7,20 +7,30 @@ use std::{
 
 use shared::proto;
 use lobby::{Lobby, Event, EventKind};
-use vec_map::VecMap;
+use vec_map::{Entry, VecMap};
 
 pub use shared::game::Game;
+pub use shared::players::Players;
+
+enum Connection {
+    Uninitialised,
+    Player(usize)
+}
 
 pub struct GameServer<G: Game + 'static> {
     lobby: Arc<Mutex<Lobby<proto::Client<G>>>>,
-    players: Arc<Mutex<VecMap<G::Player>>>,
+    connections: Arc<Mutex<VecMap<Connection>>>,
+    players: Players<G>
 }
 
 impl<G: Game + 'static> GameServer<G> {
     fn new(lobby: Arc<Mutex<Lobby<proto::Client<G>>>>) -> Self {
+        let players = Players::new();
+
         GameServer {
             lobby,
-            players: Arc::new(Mutex::new(VecMap::new())),
+            connections: Arc::new(Mutex::new(VecMap::new())),
+            players,
         }
     }
 
@@ -31,25 +41,41 @@ impl<G: Game + 'static> GameServer<G> {
             },
 
             EventKind::DataReceived(proto::Client::PlayerUpdate(player)) => {
-                self.players.lock().unwrap().insert(event.from, player.clone());
-                self.lobby.lock().unwrap().send(proto::Server::PlayerUpdate::<G>(event.from, player)).unwrap();
+                if let Entry::Occupied(ref mut entry) = self.connections.lock().unwrap().entry(event.from) {
+                    let player_clone = player.clone();
+                    let mut players = self.players.clone();
+
+                    take_mut::take(
+                        entry.get_mut(),
+                        move |connection| match connection {
+                            Connection::Uninitialised => Connection::Player(players.add_player(player)),
+                            
+                            Connection::Player(player_index) => {
+                                players.update_player(player_index, player);
+                                connection
+                            }
+                        });
+
+                    self.lobby.lock().unwrap().send(proto::Server::PlayerUpdate::<G>(event.from, player_clone)).unwrap();
+                }
             }
 
             EventKind::ConnectionReceived(addr) => {
-                self.players.lock().unwrap().insert(event.from, Default::default());
+                self.connections.lock().unwrap().insert(event.from, Connection::Uninitialised);
 
                 {
                     let lobby = self.lobby.lock().unwrap();
+
                     lobby.send_to_except(event.from, proto::Server::Connection::<G>(event.from, addr)).unwrap();
 
-                    for (id, player) in self.players.lock().unwrap().iter() {
-                        lobby.send_to(event.from, proto::Server::PlayerUpdate::<G>(id, player.clone())).unwrap();
-                    }
+                    self.players.with(
+                        |index, player| lobby.send_to(event.from, proto::Server::PlayerUpdate::<G>(index, player.clone())).unwrap()
+                    )
                 }
             },
 
             EventKind::ConnectionLost(_) => {
-                self.players.lock().unwrap().remove(event.from);
+                self.connections.lock().unwrap().remove(event.from);
                 self.lobby.lock().unwrap().send(proto::Server::ConnectionLost::<G>(event.from)).unwrap();
             },
 
